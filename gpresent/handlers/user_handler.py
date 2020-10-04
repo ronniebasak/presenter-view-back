@@ -5,11 +5,12 @@ import json
 import pymongo.errors as MongoErrors
 import bcrypt
 import sys
-import bson.json_util as json_util
+from bson import json_util, ObjectId
 import jwt
 from datetime import datetime, timedelta
 import os
 from ..middleware.json_middleware import jsonify
+from ..middleware.auth_middleware import authenticated
 
 async def index(request):
     return web.Response(text='Hello Aiohttp!')
@@ -47,7 +48,7 @@ async def authenticate(request):
     
     password = request_data['password'].encode('utf-8')
     if(not bcrypt.checkpw(password, user_inst.password.encode('utf-8'))):
-        return web.Response(body=json.dumps({'status': "Auth fail"}), status=401)
+        return {'status': "Auth fail", 'statusCode': 401}
 
     token=jwt.encode({
         'id': str(user_inst.id), 
@@ -56,13 +57,14 @@ async def authenticate(request):
     }, os.getenv('SECRET'))
     
     to_return = {'token': token.decode('ascii')}
-    return web.Response(body=json.dumps(to_return))
+    return to_return
 
 
+@jsonify
+@authenticated
+async def whoami(request):
+    user_inst = await User.get({'_id': ObjectId(request.session_data['id'])});
+    to_return = user_inst.dict();
 
-__all__ = [
-    "index",
-    "get_by_uid",
-    "add_new_user",
-    "authenticate"
-]
+    del to_return['password'];
+    return to_return
